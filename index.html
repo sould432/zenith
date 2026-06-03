@@ -1,142 +1,410 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Task Board</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>인터넷 업무 칠판</title>
+
 <style>
-:root{--bg:#f3f4f6;--panel:#fff;--shadow:0 10px 25px rgba(0,0,0,.12)}
-body.dark{--bg:#111827;--panel:#1f2937;color:#f9fafb}
-*{box-sizing:border-box} body{margin:0;font-family:Arial,sans-serif;background:var(--bg)}
-.top{display:flex;gap:8px;padding:10px;position:sticky;top:0;background:var(--panel);box-shadow:var(--shadow);z-index:100}
-#board{position:relative;height:calc(100vh - 60px)}
-.note{position:absolute;width:240px;padding:12px;border-radius:14px;box-shadow:var(--shadow);cursor:grab}
-.note.completed{opacity:.45;text-decoration:line-through}
-.urgent{background:#fca5a5}.high{background:#fdba74}.normal{background:#fde68a}.low{background:#93c5fd}
-#modal,#overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);align-items:center;justify-content:center}
-.dialog{background:white;padding:16px;border-radius:14px;width:360px}
-#menu{display:none;position:fixed;background:white;border-radius:10px;overflow:hidden;box-shadow:var(--shadow)}
-#menu div{padding:10px 15px;cursor:pointer} #menu div:hover{background:#eee}
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        font-family: "Pretendard", sans-serif;
+    }
+
+    body {
+        overflow: hidden;
+        background: #1e1e1e;
+    }
+
+    #toolbar {
+        position: fixed;
+        top: 15px;
+        left: 15px;
+        z-index: 9999;
+    }
+
+    #addBtn {
+        padding: 12px 18px;
+        border: none;
+        border-radius: 10px;
+        background: #ffd54f;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: bold;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    }
+
+    #board {
+        width: 100vw;
+        height: 100vh;
+        position: relative;
+    }
+
+    .note {
+        width: 240px;
+        min-height: 180px;
+        position: absolute;
+        background: #fff59d;
+        border-radius: 12px;
+        padding: 14px;
+        box-shadow: 0 6px 18px rgba(0,0,0,0.3);
+        cursor: grab;
+        user-select: none;
+        transition: 0.2s;
+    }
+
+    .note.completed {
+        opacity: 0.45;
+    }
+
+    .note.completed .content {
+        text-decoration: line-through;
+    }
+
+    .content {
+        font-size: 16px;
+        white-space: pre-wrap;
+        word-break: break-word;
+        margin-bottom: 12px;
+    }
+
+    .alarm {
+        font-size: 12px;
+        color: #555;
+    }
+
+    .context-menu {
+        position: fixed;
+        background: white;
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        z-index: 10000;
+        display: none;
+    }
+
+    .context-menu button {
+        width: 140px;
+        padding: 12px;
+        border: none;
+        background: white;
+        cursor: pointer;
+        text-align: left;
+    }
+
+    .context-menu button:hover {
+        background: #f0f0f0;
+    }
+
+    .modal {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.5);
+        display: none;
+        justify-content: center;
+        align-items: center;
+        z-index: 20000;
+    }
+
+    .modal-content {
+        background: white;
+        padding: 24px;
+        border-radius: 16px;
+        width: 350px;
+    }
+
+    .modal-content h2 {
+        margin-bottom: 16px;
+    }
+
+    textarea,
+    input {
+        width: 100%;
+        margin-bottom: 12px;
+        padding: 10px;
+        border-radius: 8px;
+        border: 1px solid #ccc;
+    }
+
+    .modal-buttons {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+    }
+
+    .modal-buttons button {
+        padding: 10px 14px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+    }
+
+    .save-btn {
+        background: #4caf50;
+        color: white;
+    }
+
+    .cancel-btn {
+        background: #ccc;
+    }
 </style>
 </head>
+
 <body>
-<div class="top">
-<button onclick="openModal()">업무 추가</button>
-<button onclick="autoArrange()">자동 정렬</button>
-<button onclick="document.body.classList.toggle('dark')">다크모드</button>
-<input id="search" placeholder="검색" oninput="render()">
+
+<div id="toolbar">
+    <button id="addBtn">+ 업무 추가</button>
 </div>
+
 <div id="board"></div>
 
-<div id="overlay">
-<div class="dialog">
-<h3>업무</h3>
-<textarea id="txt" rows="5" style="width:100%"></textarea><br>
-<input id="alarm" type="datetime-local" style="width:100%"><br>
-<select id="priority" style="width:100%">
-<option value="urgent">긴급</option>
-<option value="high">높음</option>
-<option value="normal">보통</option>
-<option value="low">낮음</option>
-</select><br><br>
-<button onclick="saveNote()">저장</button>
-</div></div>
+<div class="context-menu" id="contextMenu">
+    <button id="editBtn">수정</button>
+    <button id="completeBtn">완료 / 취소</button>
+    <button id="deleteBtn">삭제</button>
+</div>
 
-<div id="menu">
-<div onclick="editNote()">수정</div>
-<div onclick="toggleDone()">완료/취소</div>
-<div onclick="deleteNote()">삭제</div>
+<div class="modal" id="modal">
+    <div class="modal-content">
+        <h2>업무 작성</h2>
+
+        <textarea id="taskInput" rows="5" placeholder="업무 내용을 입력하세요"></textarea>
+
+        <label>알람 시간</label>
+        <input type="datetime-local" id="alarmInput" />
+
+        <div class="modal-buttons">
+            <button class="cancel-btn" id="cancelModal">취소</button>
+            <button class="save-btn" id="saveModal">저장</button>
+        </div>
+    </div>
 </div>
 
 <script>
-let notes=JSON.parse(localStorage.getItem('taskboard')||'[]');
-let current=null, editId=null;
+const board = document.getElementById("board");
+const addBtn = document.getElementById("addBtn");
 
-function persist(){localStorage.setItem('taskboard',JSON.stringify(notes));}
+const modal = document.getElementById("modal");
+const taskInput = document.getElementById("taskInput");
+const alarmInput = document.getElementById("alarmInput");
 
-function openModal(id=null){
- editId=id; overlay.style.display='flex';
- if(id){let n=notes.find(x=>x.id===id); txt.value=n.text; alarm.value=n.alarm||''; priority.value=n.priority;}
- else{txt.value=''; alarm.value=''; priority.value='normal';}
+const saveModal = document.getElementById("saveModal");
+const cancelModal = document.getElementById("cancelModal");
+
+const contextMenu = document.getElementById("contextMenu");
+const editBtn = document.getElementById("editBtn");
+const deleteBtn = document.getElementById("deleteBtn");
+const completeBtn = document.getElementById("completeBtn");
+
+let notes = JSON.parse(localStorage.getItem("notes") || "[]");
+
+let selectedNoteId = null;
+let editMode = false;
+
+function saveNotes() {
+    localStorage.setItem("notes", JSON.stringify(notes));
 }
 
-txt?.addEventListener?.('keydown',e=>{
- if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();saveNote();}
+function renderNotes() {
+    board.innerHTML = "";
+
+    notes.forEach(note => {
+        const div = document.createElement("div");
+        div.className = "note";
+
+        if (note.completed) {
+            div.classList.add("completed");
+        }
+
+        div.style.left = note.x + "px";
+        div.style.top = note.y + "px";
+
+        div.innerHTML = `
+            <div class="content">${note.text}</div>
+            <div class="alarm">
+                ${
+                    note.alarm
+                    ? "⏰ " + new Date(note.alarm).toLocaleString()
+                    : "알람 없음"
+                }
+            </div>
+        `;
+
+        enableDrag(div, note);
+
+        div.addEventListener("contextmenu", e => {
+            e.preventDefault();
+
+            selectedNoteId = note.id;
+
+            contextMenu.style.display = "block";
+            contextMenu.style.left = e.clientX + "px";
+            contextMenu.style.top = e.clientY + "px";
+        });
+
+        board.appendChild(div);
+    });
+}
+
+function createNote(text, alarm) {
+    notes.push({
+        id: Date.now(),
+        text,
+        alarm,
+        x: 200,
+        y: 120,
+        completed: false
+    });
+
+    saveNotes();
+    renderNotes();
+}
+
+function enableDrag(element, note) {
+    let offsetX = 0;
+    let offsetY = 0;
+    let dragging = false;
+
+    element.addEventListener("mousedown", e => {
+        if (e.button !== 0) return;
+
+        dragging = true;
+
+        offsetX = e.clientX - note.x;
+        offsetY = e.clientY - note.y;
+
+        element.style.cursor = "grabbing";
+    });
+
+    window.addEventListener("mousemove", e => {
+        if (!dragging) return;
+
+        note.x = e.clientX - offsetX;
+        note.y = e.clientY - offsetY;
+
+        element.style.left = note.x + "px";
+        element.style.top = note.y + "px";
+    });
+
+    window.addEventListener("mouseup", () => {
+        if (dragging) {
+            dragging = false;
+            element.style.cursor = "grab";
+            saveNotes();
+        }
+    });
+}
+
+addBtn.addEventListener("click", () => {
+    editMode = false;
+
+    taskInput.value = "";
+    alarmInput.value = "";
+
+    modal.style.display = "flex";
 });
 
-function saveNote(){
- if(!txt.value.trim()) return;
- if(editId){
-  let n=notes.find(x=>x.id===editId);
-  n.text=txt.value;n.alarm=alarm.value;n.priority=priority.value;
- }else{
-  notes.push({id:Date.now(),text:txt.value,alarm:alarm.value,priority:priority.value,x:20,y:20,completed:false});
-  autoArrange(false);
- }
- persist(); render(); overlay.style.display='none';
+saveModal.addEventListener("click", () => {
+    const text = taskInput.value.trim();
+    const alarm = alarmInput.value;
+
+    if (!text) {
+        alert("업무 내용을 입력하세요.");
+        return;
+    }
+
+    if (editMode) {
+        const note = notes.find(n => n.id === selectedNoteId);
+
+        note.text = text;
+        note.alarm = alarm;
+
+    } else {
+        createNote(text, alarm);
+    }
+
+    saveNotes();
+    renderNotes();
+
+    modal.style.display = "none";
+});
+
+cancelModal.addEventListener("click", () => {
+    modal.style.display = "none";
+});
+
+window.addEventListener("click", () => {
+    contextMenu.style.display = "none";
+});
+
+editBtn.addEventListener("click", () => {
+    const note = notes.find(n => n.id === selectedNoteId);
+
+    if (!note) return;
+
+    editMode = true;
+
+    taskInput.value = note.text;
+    alarmInput.value = note.alarm || "";
+
+    modal.style.display = "flex";
+});
+
+deleteBtn.addEventListener("click", () => {
+    notes = notes.filter(n => n.id !== selectedNoteId);
+
+    saveNotes();
+    renderNotes();
+});
+
+completeBtn.addEventListener("click", () => {
+    const note = notes.find(n => n.id === selectedNoteId);
+
+    if (!note) return;
+
+    note.completed = !note.completed;
+
+    saveNotes();
+    renderNotes();
+});
+
+function checkAlarms() {
+    const now = new Date().getTime();
+
+    notes.forEach(note => {
+        if (!note.alarm || note.completed) return;
+
+        const alarmTime = new Date(note.alarm).getTime();
+
+        if (
+            now >= alarmTime &&
+            !note.notified
+        ) {
+            note.notified = true;
+
+            alert("⏰ 업무 알림\n\n" + note.text);
+
+            if (Notification.permission === "granted") {
+                new Notification("업무 리마인드", {
+                    body: note.text
+                });
+            }
+
+            saveNotes();
+        }
+    });
 }
 
-function autoArrange(redraw=true){
- let cols=Math.max(1,Math.floor(window.innerWidth/270));
- notes.filter(n=>!n.completed).forEach((n,i)=>{
-  n.x=20+(i%cols)*260;
-  n.y=20+Math.floor(i/cols)*190;
- });
- persist(); if(redraw) render();
+if ("Notification" in window) {
+    Notification.requestPermission();
 }
 
-function render(){
- board.innerHTML='';
- let q=(search.value||'').toLowerCase();
- notes.filter(n=>n.text.toLowerCase().includes(q)).forEach(n=>{
-  let d=document.createElement('div');
-  d.className='note '+n.priority+(n.completed?' completed':'');
-  d.style.left=n.x+'px'; d.style.top=n.y+'px';
-  d.innerHTML='<b>'+n.text+'</b><hr><small>'+(n.alarm||'알람 없음')+'</small>';
-  drag(d,n);
-  d.oncontextmenu=(e)=>{
-   e.preventDefault();
-   current=n.id;
-   menu.style.display='block';
-   menu.style.left=e.pageX+'px';
-   menu.style.top=e.pageY+'px';
-  };
-  board.appendChild(d);
- });
-}
+setInterval(checkAlarms, 1000);
 
-function drag(el,n){
- let active=false,ox=0,oy=0;
- el.onmousedown=e=>{active=true;ox=e.clientX-n.x;oy=e.clientY-n.y;}
- document.addEventListener('mousemove',e=>{
-  if(!active)return;
-  n.x=e.clientX-ox;n.y=e.clientY-oy;
-  el.style.left=n.x+'px';el.style.top=n.y+'px';
- });
- document.addEventListener('mouseup',()=>{if(active){active=false;persist();}});
-}
-
-document.addEventListener('click',()=>menu.style.display='none');
-
-function editNote(){openModal(current)}
-function toggleDone(){let n=notes.find(x=>x.id===current);n.completed=!n.completed;persist();render();}
-function deleteNote(){if(confirm('삭제할까요?')){notes=notes.filter(x=>x.id!==current);persist();render();}}
-
-if('Notification' in window) Notification.requestPermission();
-setInterval(()=>{
- let now=Date.now();
- notes.forEach(n=>{
-  if(n.completed||!n.alarm||n.alerted)return;
-  if(now>=new Date(n.alarm).getTime()){
-   n.alerted=true;
-   alert('업무 알림: '+n.text);
-   if(Notification.permission==='granted') new Notification('업무 알림',{body:n.text});
-   persist();
-  }
- });
-},10000);
-
-render();
+renderNotes();
 </script>
+
 </body>
 </html>
