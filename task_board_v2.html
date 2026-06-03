@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Task Board</title>
+<style>
+:root{--bg:#f3f4f6;--panel:#fff;--shadow:0 10px 25px rgba(0,0,0,.12)}
+body.dark{--bg:#111827;--panel:#1f2937;color:#f9fafb}
+*{box-sizing:border-box} body{margin:0;font-family:Arial,sans-serif;background:var(--bg)}
+.top{display:flex;gap:8px;padding:10px;position:sticky;top:0;background:var(--panel);box-shadow:var(--shadow);z-index:100}
+#board{position:relative;height:calc(100vh - 60px)}
+.note{position:absolute;width:240px;padding:12px;border-radius:14px;box-shadow:var(--shadow);cursor:grab}
+.note.completed{opacity:.45;text-decoration:line-through}
+.urgent{background:#fca5a5}.high{background:#fdba74}.normal{background:#fde68a}.low{background:#93c5fd}
+#modal,#overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);align-items:center;justify-content:center}
+.dialog{background:white;padding:16px;border-radius:14px;width:360px}
+#menu{display:none;position:fixed;background:white;border-radius:10px;overflow:hidden;box-shadow:var(--shadow)}
+#menu div{padding:10px 15px;cursor:pointer} #menu div:hover{background:#eee}
+</style>
+</head>
+<body>
+<div class="top">
+<button onclick="openModal()">업무 추가</button>
+<button onclick="autoArrange()">자동 정렬</button>
+<button onclick="document.body.classList.toggle('dark')">다크모드</button>
+<input id="search" placeholder="검색" oninput="render()">
+</div>
+<div id="board"></div>
+
+<div id="overlay">
+<div class="dialog">
+<h3>업무</h3>
+<textarea id="txt" rows="5" style="width:100%"></textarea><br>
+<input id="alarm" type="datetime-local" style="width:100%"><br>
+<select id="priority" style="width:100%">
+<option value="urgent">긴급</option>
+<option value="high">높음</option>
+<option value="normal">보통</option>
+<option value="low">낮음</option>
+</select><br><br>
+<button onclick="saveNote()">저장</button>
+</div></div>
+
+<div id="menu">
+<div onclick="editNote()">수정</div>
+<div onclick="toggleDone()">완료/취소</div>
+<div onclick="deleteNote()">삭제</div>
+</div>
+
+<script>
+let notes=JSON.parse(localStorage.getItem('taskboard')||'[]');
+let current=null, editId=null;
+
+function persist(){localStorage.setItem('taskboard',JSON.stringify(notes));}
+
+function openModal(id=null){
+ editId=id; overlay.style.display='flex';
+ if(id){let n=notes.find(x=>x.id===id); txt.value=n.text; alarm.value=n.alarm||''; priority.value=n.priority;}
+ else{txt.value=''; alarm.value=''; priority.value='normal';}
+}
+
+txt?.addEventListener?.('keydown',e=>{
+ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();saveNote();}
+});
+
+function saveNote(){
+ if(!txt.value.trim()) return;
+ if(editId){
+  let n=notes.find(x=>x.id===editId);
+  n.text=txt.value;n.alarm=alarm.value;n.priority=priority.value;
+ }else{
+  notes.push({id:Date.now(),text:txt.value,alarm:alarm.value,priority:priority.value,x:20,y:20,completed:false});
+  autoArrange(false);
+ }
+ persist(); render(); overlay.style.display='none';
+}
+
+function autoArrange(redraw=true){
+ let cols=Math.max(1,Math.floor(window.innerWidth/270));
+ notes.filter(n=>!n.completed).forEach((n,i)=>{
+  n.x=20+(i%cols)*260;
+  n.y=20+Math.floor(i/cols)*190;
+ });
+ persist(); if(redraw) render();
+}
+
+function render(){
+ board.innerHTML='';
+ let q=(search.value||'').toLowerCase();
+ notes.filter(n=>n.text.toLowerCase().includes(q)).forEach(n=>{
+  let d=document.createElement('div');
+  d.className='note '+n.priority+(n.completed?' completed':'');
+  d.style.left=n.x+'px'; d.style.top=n.y+'px';
+  d.innerHTML='<b>'+n.text+'</b><hr><small>'+(n.alarm||'알람 없음')+'</small>';
+  drag(d,n);
+  d.oncontextmenu=(e)=>{
+   e.preventDefault();
+   current=n.id;
+   menu.style.display='block';
+   menu.style.left=e.pageX+'px';
+   menu.style.top=e.pageY+'px';
+  };
+  board.appendChild(d);
+ });
+}
+
+function drag(el,n){
+ let active=false,ox=0,oy=0;
+ el.onmousedown=e=>{active=true;ox=e.clientX-n.x;oy=e.clientY-n.y;}
+ document.addEventListener('mousemove',e=>{
+  if(!active)return;
+  n.x=e.clientX-ox;n.y=e.clientY-oy;
+  el.style.left=n.x+'px';el.style.top=n.y+'px';
+ });
+ document.addEventListener('mouseup',()=>{if(active){active=false;persist();}});
+}
+
+document.addEventListener('click',()=>menu.style.display='none');
+
+function editNote(){openModal(current)}
+function toggleDone(){let n=notes.find(x=>x.id===current);n.completed=!n.completed;persist();render();}
+function deleteNote(){if(confirm('삭제할까요?')){notes=notes.filter(x=>x.id!==current);persist();render();}}
+
+if('Notification' in window) Notification.requestPermission();
+setInterval(()=>{
+ let now=Date.now();
+ notes.forEach(n=>{
+  if(n.completed||!n.alarm||n.alerted)return;
+  if(now>=new Date(n.alarm).getTime()){
+   n.alerted=true;
+   alert('업무 알림: '+n.text);
+   if(Notification.permission==='granted') new Notification('업무 알림',{body:n.text});
+   persist();
+  }
+ });
+},10000);
+
+render();
+</script>
+</body>
+</html>
